@@ -68,6 +68,12 @@ object bcwm {
       }
     }.text("output document type")
 
+    opt[URI]('b',"base")
+      .optional()
+      .valueName("<url>")
+      .action{ (url, c) => c.copy(base=Some(url.toURL))}
+      .text("set base url for local documents")
+
     arg[URI]("<url|file>")
       .required()
       .action { (uri, c) =>
@@ -87,7 +93,9 @@ object bcwm {
 
   def main(args: Array[String]) {
     parser.parse(args, Config()) map { config =>
-       SesameFetcher.fetch(config)
+      if (config.lib.equalsIgnoreCase("sesame"))
+        SesameFetcher.fetch(config)
+      else JenaFetcher.fetch(config)
     } getOrElse {
       println("wrong arguments!")
       // arguments are bad, error message will have been displayed
@@ -98,6 +106,7 @@ object bcwm {
   case class Config(inType: Option[MediaType]=None,
     outType: MediaType=`text/turtle`,
     url: Option[URL]=None,
+    base: Option[URL]=None,
     lib: String="sesame")
 
 }

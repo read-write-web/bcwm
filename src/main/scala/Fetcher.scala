@@ -1,13 +1,3 @@
-import RDFMediaTypes._
-import akka.actor.ActorSystem
-import org.w3.banana.jena.Jena
-import org.w3.banana.sesame.Sesame
-import org.w3.banana.{RDFOps, RDF}
-import scala.concurrent.{Await, Future, ExecutionContext}
-import scala.util.{Failure, Success}
-import spray.http.HttpHeaders.Accept
-import spray.http.HttpRequest
-import spray.http.MediaTypes._
 
 /*
  * Copyright 2013 Henry Story
@@ -25,51 +15,82 @@ import spray.http.MediaTypes._
  *    limitations under the License.
  */
 
+import java.io.File
+import java.net.{URI,URL}
+import RDFMediaTypes._
+import akka.actor.ActorSystem
+import org.w3.banana.jena.Jena
+import org.w3.banana.sesame.Sesame
+import org.w3.banana.{RDFOps, RDF}
+import scala.concurrent.{Await, Future, ExecutionContext}
+import scala.util.control.NonFatal
+import scala.util.Failure
+import scala.util.Success
+import scala.util.{Failure, Success}
+import spray.http.HttpHeaders.Accept
+import spray.http._
+import spray.http.HttpRequest
+import spray.http.MediaTypes._
+import spray.routing.directives.FileAndResourceDirectives
+
+
 /**
  * Created by hjs on 23/12/2013.
  */
 class Fetcher[Rdf<:RDF](implicit val ops: RDFOps[Rdf],  graphTools: GraphTools[Rdf]) {
-   def fetch(config: bcwm.Config) {
-     System.err.println(s"config=$config")
-     import spray.httpx.unmarshalling._
-     import spray.client.pipelining._
-     import scala.concurrent.duration._
-     implicit val system = ActorSystem()
+  def fetch(config: bcwm.Config) {
+    System.err.println(s"config=$config")
+    import spray.httpx.unmarshalling._
+    import spray.client.pipelining._
+    import scala.concurrent.duration._
+    implicit val system = ActorSystem()
 
-     implicit val ec: ExecutionContext = system.dispatcher // execution context for futures
-     // execution context for futures
-     implicit val timeout = 1 minute
-     val uriStr = config.url.get.toString.split("#").head
+    implicit val ec: ExecutionContext = system.dispatcher // execution context for futures
+    // execution context for futures
+    implicit val timeout = 1 minute
+    val uriStr = config.url.get.toString.split("#").head
+    val urlDoc = new URL(uriStr)
+    val base = if (urlDoc.getProtocol.equalsIgnoreCase("file")) {
+      config.base.getOrElse(urlDoc)
+    } else urlDoc
 
-     implicit val jgt: Unmarshaller[Rdf#Graph] = graphTools.GraphUnmarshaller(new java.net.URI(uriStr))
+    implicit val jgt: Unmarshaller[Rdf#Graph] = graphTools.GraphUnmarshaller(base)
 
-     val pipeline: HttpRequest => Future[Deserialized[Rdf#Graph]] = {
-       addHeader(Accept(`text/turtle`.withQValue(0.9),
-                         `application/n-triples`.withQValue(0.8),
-                         `application/rdf+xml`.withQValue(0.7),
-                         `text/html`.withQValue(0.3)))
-         .~>(sendReceive)
-         .~>(unmarshal[Deserialized[Rdf#Graph]])
-     }
-     val req = Get(uriStr)
-     val response: Future[Deserialized[Rdf#Graph]] = pipeline(req)
-     response.onComplete{
-       case Success(Right(graph)) => {
-         for (wr<-graphTools.Writers.getWriterFor(config.outType)) {
-           wr.write(graph,System.out,"")
-         }
-       }
-       case Success(Left(serialError)) => {
-         System.err.println(s"problem serialising document from $uriStr: $serialError")
-       }
-       case Failure(e) => {
-         System.err.println(s"error fetching document from $uriStr: $e")
-       }
-     }
-     Await.result(response,2 minutes)
-     system.shutdown()
+    val pipeline: HttpRequest => Future[Deserialized[Rdf#Graph]] = {
+      addHeader(Accept(`text/turtle`.withQValue(0.9),
+        `application/n-triples`.withQValue(0.8),
+        `application/rdf+xml`.withQValue(0.7),
+        `text/html`.withQValue(0.3)))
+        .~>(sendReceive)
+        .~>(unmarshal[Deserialized[Rdf#Graph]])
+    }
+    val response: Future[Deserialized[Rdf#Graph]] = if (!urlDoc.getProtocol.equalsIgnoreCase("file")) {
+      pipeline(Get(uriStr))
+    } else {
+      Future {
+        jgt(HttpEntity(`application/rdf+xml`.withCharset(HttpCharsets.`UTF-8`), HttpData(new File(urlDoc.getPath))))
+      }
+    }
 
-   }
+    response.onComplete {
+      case Success(Right(graph)) => {
+        for (wr <- graphTools.Writers.getWriterFor(config.outType)) {
+          wr.write(graph, System.out, "")
+          System.out.flush()
+        }
+      }
+      case Success(Left(serialError)) => {
+        System.err.println(s"problem serialising document from $uriStr: $serialError")
+      }
+      case Failure(e) => {
+        System.err.println(s"error fetching document from $uriStr: $e")
+      }
+    }
+    Await.result(response, 2 minutes)
+    system.shutdown()
+  }
+
+
 }
 
 object SesameFetcher extends Fetcher[Sesame]()(Sesame.ops,SesameGraphTools)

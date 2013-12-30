@@ -22,7 +22,7 @@ import org.w3.banana.sesame.Sesame
 import scala.util.{Success, Try}
 import spray.http._
 import spray.httpx.unmarshalling._
-import java.net.{URI=>jURI}
+import java.net.{URL=>jURL}
 
 
 /**
@@ -31,7 +31,7 @@ import java.net.{URI=>jURI}
 trait GraphTools[Rdf<:RDF] {
 
    /** This returns a real Graph - no relative URIs */
-   implicit def GraphUnmarshaller(base: jURI): Unmarshaller[Rdf#Graph]
+   implicit def GraphUnmarshaller(base: jURL): Unmarshaller[Rdf#Graph]
 
    implicit val Writers: Writers[Rdf]
 
@@ -70,7 +70,7 @@ object JenaGraphTools extends GraphTools[Jena] {
 
 
   //todo: all of these serialisers are blocking and use up a lot of RAM. Not good.
-  implicit def GraphUnmarshaller(base: jURI): Unmarshaller[Jena#Graph] = Unmarshaller[Jena#Graph](pureRdfMediaRanges : _*) {
+  implicit def GraphUnmarshaller(base: jURL): Unmarshaller[Jena#Graph] = Unmarshaller[Jena#Graph](pureRdfMediaRanges : _*) {
     case HttpEntity.NonEmpty(ContentType(`application/rdf+xml`,charset), data) => {
       JenaRDFReader.rdfxmlReader.read(inputStream(data,charset),base.toString).get
     }
@@ -95,7 +95,7 @@ object SesameGraphTools extends GraphTools[Sesame] {
   }
 
   /** This returns a real Graph - no relative URIs */
-  implicit def GraphUnmarshaller(base: jURI) = Unmarshaller[Sesame#Graph](pureRdfMediaRanges : _*) {
+  implicit def GraphUnmarshaller(base: jURL) = Unmarshaller[Sesame#Graph](pureRdfMediaRanges : _*) {
     case HttpEntity.NonEmpty(ContentType(`application/rdf+xml`,charset), data) => {
       Sesame.rdfxmlReader.read(inputStream(data,charset),base.toString).get
     }

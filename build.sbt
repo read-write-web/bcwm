@@ -4,6 +4,13 @@ name := "bcwm"
 
 version := "0.1-SNAPSHOT"
 
+//OneJar: https://github.com/sbt/sbt-onejar
+seq(com.github.retronym.SbtOneJar.oneJarSettings: _*)
+
+libraryDependencies += "commons-lang" % "commons-lang" % "2.6"
+
+
+
 resolvers += "Typesafe Snapshots" at "http://repo.typesafe.com/typesafe/snapshots/"
 
 resolvers += "Sonatype OSS Releases" at "http://oss.sonatype.org/content/repositories/releases/"
@@ -25,4 +32,8 @@ libraryDependencies += "io.spray" % "spray-client" % "1.2.0"
 
 libraryDependencies += "io.spray" % "spray-io" % "1.2.0"
 
+libraryDependencies += "io.spray" % "spray-routing" % "1.2.0"
+
 libraryDependencies += "com.typesafe.akka" %% "akka-actor" % "2.2.3"
+
+
