@@ -16,8 +16,8 @@
 
 import java.io.File
 import java.net.{URI, URL}
-import scala.Some
-import spray.http._
+
+import akka.http.scaladsl.model.MediaType
 
 
 /**
@@ -37,9 +37,9 @@ object bcwm {
       .optional()
       .valueName("{ttl,nt,rdf,html}")
       .action { (ext, c) =>
-      c.copy(inType = MediaTypes.forExtension(ext))
+      c.copy(inType = RDFMediaTypes.forExtensionOption(ext))
     }.validate { ext =>
-      MediaTypes.forExtension(ext) match {
+      RDFMediaTypes.forExtensionOption(ext) match {
         case None => failure("Option --in must have as value one of 'ttl', 'ntriples', 'rdf' or 'html'")
         case Some(mime) if !rdfMimeTypes.contains(mime) => failure(s"Option --in $mime does not specify an allowed mime type")
         case _ => success
@@ -59,9 +59,9 @@ object bcwm {
     opt[String]('o', "out")
       .optional()
       .valueName("{ttl,nt,rdf}")
-      .action { (ext, c) => c.copy(outType = MediaTypes.forExtension(ext).getOrElse(`text/turtle`)) }
+      .action { (ext, c) => c.copy(outType = RDFMediaTypes.forExtensionOption(ext).getOrElse(`text/turtle`)) }
       .validate { ext =>
-      MediaTypes.forExtension(ext) match {
+      RDFMediaTypes.forExtensionOption(ext) match {
         case None => failure("Option --in must have as value one of 'ttl', 'ntriples', 'rdf' or 'html'")
         case Some(mime) if !pureRdfTypes.contains(mime) => failure(s"Option --in $mime does not specify an allowed mime type")
         case _ => success
@@ -103,7 +103,8 @@ object bcwm {
   }
 
 
-  case class Config(inType: Option[MediaType]=None,
+  case class Config(
+    inType: Option[MediaType]=None,
     outType: MediaType=`text/turtle`,
     url: Option[URL]=None,
     base: Option[URL]=None,

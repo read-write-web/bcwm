@@ -15,32 +15,36 @@
  */
 
 import RDFMediaTypes._
-import org.w3.banana.jena.{JenaRDFWriter, Jena}
-import org.w3.banana.sesame.{Sesame, SesameRDFWriter}
-import org.w3.banana.{RDFWriter, RDF}
+import akka.http.scaladsl.model.MediaType
+import org.w3.banana.RDF
+import org.w3.banana.io.RDFWriter
+import org.w3.banana.jena.Jena
+import org.w3.banana.sesame.Sesame
+
 import scala.collection.immutable.HashMap
-import spray.http.MediaType
+import scala.util.Try
 
 /**
  * Created by hjs on 23/12/2013.
  */
 
 trait Writers[Rdf<:RDF] {
-  def getWriterFor(mediaType: MediaType): Option[RDFWriter[Rdf,_]]
+  def getWriterFor(mediaType: MediaType): Option[RDFWriter[Rdf,Try,_]]
 }
 
 object JenaWriters extends Writers[Jena] {
-  import JenaRDFWriter._
-  val writers = HashMap(`text/turtle`->turtleWriter,
+  import org.w3.banana.jena.io.JenaRDFWriter._
+  val writers: Map[MediaType, RDFWriter[Jena, Try, _]] = HashMap(`text/turtle`->turtleWriter,
                          `application/n-triples`->turtleWriter,
                         `text/n3`->turtleWriter,
                         `application/rdf+xml`->rdfxmlWriter)
 
-  def getWriterFor(mediaType: MediaType) = writers.get(mediaType)
+  def getWriterFor(mediaType: MediaType): Option[RDFWriter[Jena, Try, _]] = writers.get(mediaType)
 }
 
 object SesameWriters extends Writers[Sesame] {
-  import SesameRDFWriter._
+  import org.w3.banana.sesame.Sesame.sesameRDFWriterHelper._
+
   val writers = HashMap(`text/turtle`->turtleWriter,
                         `application/n-triples`->turtleWriter,
                         `text/n3`->turtleWriter,

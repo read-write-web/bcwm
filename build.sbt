@@ -1,14 +1,24 @@
-organization := "bcwm"
+import com.typesafe.sbt.SbtScalariform.defaultScalariformSettings
+import sbt.Keys._
+import sbt._
+//import com.sun.tools.classfile.Dependencies._
+//import com.typesafe.sbt.pgp.PgpKeys
 
-name := "bcwm"
+lazy val commonSettings = defaultScalariformSettings ++ Seq(
+  organization := "read-write-web",
+  name := "bcwm",
+  version := "0.2-SNAPSHOT",
+  scalaVersion := "2.12.1",
+  javacOptions ++= Seq("-source", "1.8", "-target", "1.8"),
+  description := "scala version of python cwm tool bases on banana-rdf",
+  startYear := Some(2013),
+  libraryDependencies ++= Dependencies.all,
+  updateOptions := updateOptions.value.withCachedResolution(true) //to speed up dependency resolution
+)
 
-version := "0.1-SNAPSHOT"
 
 //OneJar: https://github.com/sbt/sbt-onejar
-seq(com.github.retronym.SbtOneJar.oneJarSettings: _*)
-
-libraryDependencies += "commons-lang" % "commons-lang" % "2.6"
-
+//seq(com.github.retronym.SbtOneJar.oneJarSettings: _*)
 
 
 resolvers += "Typesafe Snapshots" at "http://repo.typesafe.com/typesafe/snapshots/"
@@ -19,21 +29,6 @@ resolvers += "spray repo" at "http://repo.spray.io"
 
 resolvers += "Typesafe Repository" at "http://repo.typesafe.com/typesafe/releases/"
 
-libraryDependencies ++= Seq("banana","banana-rdf", "banana-sesame", "banana-jena" )
-        .map("org.w3" %% _  % "0.4" excludeAll (ExclusionRule(organization = "org.scala-stm")))
-
-libraryDependencies += "com.github.scopt" %% "scopt" % "3.2.0"
-
-libraryDependencies += "io.spray" % "spray-http" % "1.2.0"
-
-libraryDependencies += "io.spray" % "spray-httpx" % "1.2.0"
-
-libraryDependencies += "io.spray" % "spray-client" % "1.2.0"
-
-libraryDependencies += "io.spray" % "spray-io" % "1.2.0"
-
-libraryDependencies += "io.spray" % "spray-routing" % "1.2.0"
-
-libraryDependencies += "com.typesafe.akka" %% "akka-actor" % "2.2.3"
 
 
+commonSettings

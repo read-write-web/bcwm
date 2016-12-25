@@ -14,15 +14,21 @@
  *    limitations under the License.
  */
 
+import java.io.StringReader
+import java.net.{URL => jURL}
+import java.nio.charset.Charset
+
+import JenaGraphTools.utf8
 import RDFMediaTypes._
-import java.io.{ByteArrayInputStream, InputStream}
-import org.w3.banana.jena.{JenaRDFReader, JenaRDFWriter, Jena}
+import akka.http.scaladsl.model.{ContentTypeRange, HttpEntity}
+import akka.http.scaladsl.unmarshalling.Unmarshaller
+import akka.http.scaladsl.util.FastFuture
 import org.w3.banana.RDF
+import org.w3.banana.jena.Jena
+import org.w3.banana.jena.io.JenaRDFReader
 import org.w3.banana.sesame.Sesame
-import scala.util.{Success, Try}
-import spray.http._
-import spray.httpx.unmarshalling._
-import java.net.{URL=>jURL}
+
+import scala.util.Try
 
 
 /**
@@ -31,7 +37,7 @@ import java.net.{URL=>jURL}
 trait GraphTools[Rdf<:RDF] {
 
    /** This returns a real Graph - no relative URIs */
-   implicit def GraphUnmarshaller(base: jURL): Unmarshaller[Rdf#Graph]
+   implicit def GraphUnmarshaller(base: jURL): Unmarshaller[HttpEntity,Rdf#Graph]
 
    implicit val Writers: Writers[Rdf]
 
@@ -42,9 +48,9 @@ trait GraphTools[Rdf<:RDF] {
 
 //   implicit def ResponseGraphUnmarshaller: FromResponseUnmarshaller[Rdf#Graph]
 
-  protected def inputStream(data: HttpData.NonEmpty, charset: Option[HttpCharset] ) = {
-    new ByteArrayInputStream(data.toByteArray)
-  }
+//  protected def inputStream(data: HttpData.NonEmpty, charset: Option[HttpCharset] ) = {
+//    new ByteArrayInputStream(data.toByteArray)
+//  }
 
 
 }
@@ -52,8 +58,7 @@ trait GraphTools[Rdf<:RDF] {
 
 object JenaGraphTools extends GraphTools[Jena] {
   import RDFMediaTypes._
-  import Jena.ops._
-  import org.w3.banana.syntax.URIW
+  val utf8 = Charset.forName("UTF-8")
 
   implicit val Writers = JenaWriters
 
@@ -67,23 +72,35 @@ object JenaGraphTools extends GraphTools[Jena] {
        ContentTypeRange(mediaType)
   }
 
+  implicit def GraphUnmarshaller(base: jURL): Unmarshaller[HttpEntity,Jena#Graph] = {
+    val rdfUnmarshaller = Unmarshaller.byteArrayUnmarshaller flatMapWithInput { (httpEntity, bytes) =>
+      def stringReader = new StringReader(
+        new String(
+          bytes,
+          httpEntity.contentType.charsetOption match {
+            case Some(charSet) => Try(Charset.forName(charSet.value)).getOrElse(utf8)
+            case None => utf8
+          })
+      )
 
-
-  //todo: all of these serialisers are blocking and use up a lot of RAM. Not good.
-  implicit def GraphUnmarshaller(base: jURL): Unmarshaller[Jena#Graph] = Unmarshaller[Jena#Graph](pureRdfMediaRanges : _*) {
-    case HttpEntity.NonEmpty(ContentType(`application/rdf+xml`,charset), data) => {
-      JenaRDFReader.rdfxmlReader.read(inputStream(data,charset),base.toString).get
+      httpEntity.getContentType().mediaType match {
+        case `application/rdf+xml` => FastFuture(
+          JenaRDFReader.rdfxmlReader.read(stringReader, base.toString)
+        )
+        case `text/turtle` => FastFuture(
+          JenaRDFReader.turtleReader.read(stringReader, base.toString)
+        )
+        case `application/n-triples` => FastFuture(
+          JenaRDFReader.turtleReader.read(stringReader, base.toString)
+        )
+        case t => FastFuture.failed(
+          Unmarshaller.UnsupportedContentTypeException(`application/rdf+xml`, `text/turtle`, `application/n-triples`)
+        )
+      }
     }
-    case HttpEntity.NonEmpty(ContentType(`text/turtle`,charset), data) => {
-      JenaRDFReader.turtleReader.read(inputStream(data,charset),base.toString).get
-    }
-    case HttpEntity.NonEmpty(ContentType(`application/n-triples`,charset), data) => {
-      JenaRDFReader.turtleReader.read(inputStream(data,charset),base.toString).get
-    }
-    case HttpEntity.Empty => Jena.ops.emptyGraph
+    //this should mean that if we don't get the right Content-Type, we don't even have to look at the bytes which chunked
+    rdfUnmarshaller.forContentTypes(`application/rdf+xml`,`text/turtle`,`application/n-triples`)
   }
-
-
 
 }
 
@@ -94,19 +111,36 @@ object SesameGraphTools extends GraphTools[Sesame] {
     ContentTypeRange(mediaType)
   }
 
-  /** This returns a real Graph - no relative URIs */
-  implicit def GraphUnmarshaller(base: jURL) = Unmarshaller[Sesame#Graph](pureRdfMediaRanges : _*) {
-    case HttpEntity.NonEmpty(ContentType(`application/rdf+xml`,charset), data) => {
-      Sesame.rdfxmlReader.read(inputStream(data,charset),base.toString).get
+  implicit def GraphUnmarshaller(base: jURL): Unmarshaller[HttpEntity,Sesame#Graph] = {
+    val rdfUnmarshaller = Unmarshaller.byteArrayUnmarshaller flatMapWithInput { (httpEntity, bytes) =>
+      def stringReader = new StringReader(
+        new String(
+          bytes,
+          httpEntity.contentType.charsetOption match {
+            case Some(charSet) => Try(Charset.forName(charSet.value)).getOrElse(utf8)
+            case None => utf8
+          })
+      )
+
+      httpEntity.getContentType().mediaType match {
+        case `application/rdf+xml` => FastFuture(
+          Sesame.rdfXMLReader.read(stringReader, base.toString)
+        )
+        case `text/turtle` => FastFuture(
+          Sesame.turtleReader.read(stringReader, base.toString)
+        )
+        case `application/n-triples` => FastFuture(
+          Sesame.turtleReader.read(stringReader, base.toString)
+        )
+        case t => FastFuture.failed(
+          Unmarshaller.UnsupportedContentTypeException(`application/rdf+xml`, `text/turtle`, `application/n-triples`)
+        )
+      }
     }
-    case HttpEntity.NonEmpty(ContentType(`text/turtle`,charset), data) => {
-      Sesame.turtleReader.read(inputStream(data,charset),base.toString).get
-    }
-    case HttpEntity.NonEmpty(ContentType(`application/n-triples`,charset), data) => {
-      Sesame.turtleReader.read(inputStream(data,charset),base.toString).get
-    }
-    case HttpEntity.Empty => Sesame.ops.emptyGraph
+    //this should mean that if we don't get the right Content-Type, we don't even have to look at the bytes which chunked
+    rdfUnmarshaller.forContentTypes(`application/rdf+xml`,`text/turtle`,`application/n-triples`)
   }
+
 
 
   implicit val Writers = SesameWriters
